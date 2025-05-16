@@ -47,7 +47,7 @@ export class Boid {
         const steeringStrength = 0.05;
         const separationRadius = 3;
         const targetWeight = 0.3;
-        const neighborRadius = 8;
+        const neighborRadius = 5;
 
 
 
