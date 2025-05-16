@@ -6,7 +6,7 @@ import { SPEED, BOUNDS } from './constants';
 export class Target {
     mesh: THREE.Mesh;
     velocity: THREE.Vector3;
-    constructor(position = new THREE.Vector3(0, 0, 0), radius = 10, color = 0xff0000) {
+    constructor(position = new THREE.Vector3(0, 0, 0), radius = 15, color = 0xff0000) {
         const geometry = new THREE.SphereGeometry(radius, 16, 16);
         const material = new THREE.MeshStandardMaterial({ color });
         this.mesh = new THREE.Mesh(geometry, material);

@@ -28,11 +28,11 @@ const pointLight = new THREE.PointLight(0xffffff, 3);
 pointLight.position.set(-5, -10, 10);
 scene.add(pointLight);
 const targets: Target[] = [];
-const boids: Boid[] = [];
+const boids: Boid[][] = [];
 const SPHERE_RADIUS = 1;
 
 const NUM_BOIDS = 200;
-const NUM_TARGETS = 1;
+const NUM_TARGETS = 7;
 
 function randomPointInSphere(radius: number): THREE.Vector3 {
     let u = Math.random();
@@ -48,18 +48,20 @@ function randomPointInSphere(radius: number): THREE.Vector3 {
     );
 }
 
-for (let i = 0; i < NUM_TARGETS; i++) {
-    const target = new Target();
-    scene.add(target.mesh);
-    targets.push(target);
-}
-
 loadBoidModel().then(() => {
-    for (let i = 0; i < NUM_BOIDS; i++) {
-        const boid = new Boid(targets[0]);
-        boid.mesh.position.copy(randomPointInSphere(SPHERE_RADIUS));
-        scene.add(boid.mesh);
-        boids.push(boid);
+    for (let j = 0; j < NUM_TARGETS; j++) {
+        const target = new Target();
+        scene.add(target.mesh);
+        targets.push(target);
+
+        boids[j] = [];
+
+        for (let i = 0; i < NUM_BOIDS; i++) {
+            const boid = new Boid(targets[j]);
+            boid.mesh.position.copy(randomPointInSphere(SPHERE_RADIUS));
+            scene.add(boid.mesh);
+            boids[j].push(boid);
+        }
     }
     animate();
 });
@@ -68,7 +70,9 @@ function animate() {
     requestAnimationFrame(animate);
 
     // In your animation loop:
-    boids.forEach((boid, index) => boid.update(boids, index));
+    boids.forEach(school => {
+        school.forEach((boid, index) => boid.update(school, index))
+    });
 
     targets.forEach(target => target.update());
 
