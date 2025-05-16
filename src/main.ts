@@ -1,24 +1,82 @@
-import './style.css'
-import typescriptLogo from './typescript.svg'
-import viteLogo from '/vite.svg'
-import { setupCounter } from './counter.ts'
+import * as THREE from 'three';
+import { Boid, loadBoidModel } from './Boids';
+import { Target } from './Target';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="${viteLogo}" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://www.typescriptlang.org/" target="_blank">
-      <img src="${typescriptLogo}" class="logo vanilla" alt="TypeScript logo" />
-    </a>
-    <h1>Vite + TypeScript</h1>
-    <div class="card">
-      <button id="counter" type="button"></button>
-    </div>
-    <p class="read-the-docs">
-      Click on the Vite and TypeScript logos to learn more
-    </p>
-  </div>
-`
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff)
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+);
+camera.position.z = 100;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 5);
+scene.add(ambientLight);
+
+const directionalLight = new THREE.DirectionalLight(0xffffff, 6);
+directionalLight.position.set(5, 10, 7.5);
+scene.add(directionalLight);
+
+const pointLight = new THREE.PointLight(0xffffff, 3);
+pointLight.position.set(-5, -10, 10);
+scene.add(pointLight);
+const targets: Target[] = [];
+const boids: Boid[] = [];
+const SPHERE_RADIUS = 1;
+
+const NUM_BOIDS = 200;
+const NUM_TARGETS = 1;
+
+function randomPointInSphere(radius: number): THREE.Vector3 {
+    let u = Math.random();
+    let v = Math.random();
+    let theta = 2 * Math.PI * u;
+    let phi = Math.acos(2 * v - 1);
+    let r = Math.cbrt(Math.random()) * radius;
+    let sinPhi = Math.sin(phi);
+    return new THREE.Vector3(
+        r * sinPhi * Math.cos(theta),
+        r * sinPhi * Math.sin(theta),
+        r * Math.cos(phi)
+    );
+}
+
+for (let i = 0; i < NUM_TARGETS; i++) {
+    const target = new Target();
+    scene.add(target.mesh);
+    targets.push(target);
+}
+
+loadBoidModel().then(() => {
+    for (let i = 0; i < NUM_BOIDS; i++) {
+        const boid = new Boid(targets[0]);
+        boid.mesh.position.copy(randomPointInSphere(SPHERE_RADIUS));
+        scene.add(boid.mesh);
+        boids.push(boid);
+    }
+    animate();
+});
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    // In your animation loop:
+    boids.forEach((boid, index) => boid.update(boids, index));
+
+    targets.forEach(target => target.update());
+
+    renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});

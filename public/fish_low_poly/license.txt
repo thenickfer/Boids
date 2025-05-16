@@ -1,0 +1,11 @@
+Model Information:
+* title:	Fish low poly
+* source:	https://sketchfab.com/3d-models/fish-low-poly-bf36d74f863f492a9f3a72dbae4e9a29
+* author:	RacKrab (https://sketchfab.com/RacKrab)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Fish low poly" (https://sketchfab.com/3d-models/fish-low-poly-bf36d74f863f492a9f3a72dbae4e9a29) by RacKrab (https://sketchfab.com/RacKrab) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
