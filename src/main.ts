@@ -1,40 +1,83 @@
 import * as THREE from 'three';
 import { Boid, loadBoidModel } from './Boids';
 import { Target } from './Target';
+import { BOUNDS } from './constants';
+import { SpatialPartition } from './SpatialPartition';
+//@ts-ignore
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x58baff)
 
 const camera = new THREE.PerspectiveCamera(
-    75,
+    60,
     window.innerWidth / window.innerHeight,
     0.1,
     1000
 );
-camera.position.z = 100;
+
+camera.rotation.order = 'YXZ';
+
+camera.position.set(-200, 150, 200);
+
+camera.lookAt(new THREE.Vector3(0, -25, 0));
+
+
+
+//camera.rotation.y = THREE.MathUtils.degToRad(-35);
+//camera.rotation.x = THREE.MathUtils.degToRad(-30);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 5);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0, 0); // Center of rotation
+controls.update();
+
+const sceneGeometry = new THREE.BoxGeometry(200, 200, 200);
+const sceneEdges = new THREE.EdgesGeometry(sceneGeometry);
+const lines = new THREE.LineSegments(
+    sceneEdges,
+    new THREE.LineBasicMaterial({ color: 0x000000 })
+);
+
+scene.add(lines);
+
+const ambientLight = new THREE.AmbientLight(0xffffff, 2);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 7);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
 directionalLight.position.set(5, 10, 100);
 scene.add(directionalLight);
 
-const pointLight = new THREE.PointLight(0xffffff, 3);
+const pointLight = new THREE.PointLight(0xffffff, 1);
 pointLight.position.set(-5, -10, 10);
 scene.add(pointLight);
+
+
+const floorTexture = new THREE.TextureLoader().load('/assets/floor.jpeg');
+const floorGeometry = new THREE.PlaneGeometry(BOUNDS * 2, BOUNDS * 2);
+const flooMaterial = new THREE.MeshStandardMaterial({ map: floorTexture })
+const floor = new THREE.Mesh(floorGeometry, flooMaterial);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -100;
+//floor.position.z = -100;
+scene.add(floor);
+
+
 const targets: Target[] = [];
 const boids: Boid[][] = [];
-const SPHERE_RADIUS = 10;
+//const SPHERE_RADIUS = 5;
 
 const NUM_BOIDS = 500;
-const NUM_TARGETS = 7;
+const NUM_TARGETS = 1;
 
-function randomPointInSphere(radius: number): THREE.Vector3 {
+const cellSize = 8;
+const neighborCellsOffset = 2;
+
+/* function randomPointInSphere(radius: number): THREE.Vector3 {
     let u = Math.random();
     let v = Math.random();
     let theta = 2 * Math.PI * u;
@@ -46,16 +89,88 @@ function randomPointInSphere(radius: number): THREE.Vector3 {
         r * sinPhi * Math.sin(theta),
         r * Math.cos(phi)
     );
-} //Nao vi vantagem em inicializar eles como esfera
+} */ //Nao vi vantagem em inicializar eles como esfera
 
 function randomPointInRectangle(): THREE.Vector3 {
-    const x = Math.random() * 50 - 25;
-    const y = Math.random() * 50 - 25;
-    const z = Math.random() * 80 - 40;
+    const x = Math.random() * BOUNDS * 2 - BOUNDS;
+    const y = Math.random() * BOUNDS * 2 - BOUNDS;
+    const z = Math.random() * BOUNDS * 2 - BOUNDS;
 
     return new THREE.Vector3(
         x, y, z
     );
+}
+
+const spatialPartition = new SpatialPartition<Boid>(cellSize, neighborCellsOffset);
+
+let cellVizMesh: THREE.InstancedMesh | null = null;
+
+
+function cellViz(scene: THREE.Scene) {
+
+    if (cellVizMesh) {
+        scene.remove(cellVizMesh);
+        cellVizMesh.geometry.dispose();
+        if (Array.isArray(cellVizMesh.material)) {
+            cellVizMesh.material.forEach(mat => mat.dispose());
+        } else {
+            cellVizMesh.material.dispose();
+        }
+        cellVizMesh = null;
+    }
+
+    const occupiedCells = Array.from(spatialPartition["_spatialPartitionGrid"].entries())
+        .filter(([_, value]) => value !== null)
+        .map(([key, value]) => [key.split(',').map(Number), value]);
+
+    if (occupiedCells.length === 0) return;
+
+    const geometry = new THREE.BoxGeometry(cellSize, cellSize, cellSize);
+    const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
+    material.onBeforeCompile = (shader) => {
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <color_vertex>',
+            'vColor = instanceColor;'
+        );
+    };
+    const mesh = new THREE.InstancedMesh(geometry, material, occupiedCells.length);
+    const colors = new Float32Array(occupiedCells.length * 3);
+    const color = new THREE.Color();
+
+    const dummy = new THREE.Object3D();
+
+    let maxCount = 0;
+    const cellPositions: number[][] = [];
+
+    for (let [key, boidArray] of occupiedCells) {
+        maxCount = Math.max(maxCount, boidArray.length);
+        cellPositions.push(key as number[]);
+    }
+
+
+    for (let i = 0; i < occupiedCells.length; i++) {
+        const [cellPos, boidArray] = occupiedCells[i] as [number[], Boid[]];
+        const [x, y, z] = cellPos;
+        const count = boidArray.length;
+        dummy.position.set(
+            (x + 0.5) * cellSize,
+            (y + 0.5) * cellSize,
+            (z + 0.5) * cellSize
+        );
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+
+        const t = count / maxCount;
+        color.setHSL(0.66 - 0.66 * t, 1.0, 0.5);
+        color.toArray(colors, i * 3);
+    }
+
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor.needsUpdate = true;
+    cellVizMesh = mesh;
+    scene.add(mesh);
 }
 
 loadBoidModel().then(() => {
@@ -71,6 +186,7 @@ loadBoidModel().then(() => {
             boid.mesh.position.copy(randomPointInRectangle());
             scene.add(boid.mesh);
             boids[j].push(boid);
+            spatialPartition.add(boid.mesh.position, boid);
         }
     }
     animate();
@@ -79,9 +195,21 @@ loadBoidModel().then(() => {
 function animate() {
     requestAnimationFrame(animate);
 
+    cellViz(scene);
+
+    spatialPartition.reset()
     boids.forEach(school => {
-        school.forEach((boid, index) => boid.update(school, index))
+        school.forEach((boid, index) => {
+            const pos = boid.mesh.position
+            const near = spatialPartition.findNear(pos);
+            boid.update(near, index)
+            //spatialPartition.rm(pos, boid);
+            spatialPartition.add(boid.mesh.position, boid);
+
+        }
+        )
     });
+
 
     targets.forEach(target => target.update());
 

@@ -6,11 +6,15 @@ import { SPEED, BOUNDS } from './constants';
 export class Target {
     mesh: THREE.Mesh;
     velocity: THREE.Vector3;
-    constructor(position = new THREE.Vector3(0, 0, 0), radius = 15, color = 0xff0000) {
+    constructor(radius = 15, color = 0xff0000) {
         const geometry = new THREE.SphereGeometry(radius, 16, 16);
         const material = new THREE.MeshStandardMaterial({ color });
         this.mesh = new THREE.Mesh(geometry, material);
-        this.mesh.position.copy(position);
+        this.mesh.position.copy(new THREE.Vector3(
+            Math.random() * BOUNDS * 2 - BOUNDS,
+            Math.random() * BOUNDS * 2 - BOUNDS,
+            Math.random() * BOUNDS * 2 - BOUNDS
+        ));
         const direction = new THREE.Vector3(
             Math.random() - 0.5,
             Math.random() - 0.5,

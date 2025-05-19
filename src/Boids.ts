@@ -7,7 +7,7 @@ let model: THREE.Object3D | null = null;
 export function loadBoidModel(): Promise<void> {
     return new Promise((resolve, reject) => {
         const loader = new GLTFLoader();
-        loader.load('/fish_low_poly/scene.gltf', (gltf) => {
+        loader.load('/assets/fish_low_poly/scene.gltf', (gltf) => {
             console.log(gltf.scene);
             model = gltf.scene;
             resolve();
@@ -41,20 +41,23 @@ export class Boid {
 
     update(school: Boid[], _index: number) {
 
-        const separationStrength = 0.7;
-        const cohesionStrength = 0.03;
-        const alignmentStrength = 0.03;
+        const separationStrength = 1.5;
+        const cohesionStrength = 0.008;
+        const alignmentStrength = 0.008;
         const steeringStrength = 0.05;
-        const separationRadius = 3;
-        const targetWeight = 0.3;
-        const neighborRadius = 5;
+        const separationRadius = 6;
+        const neighborRadius = 8;
 
-
-
-        this.mesh.lookAt(this.target.mesh.position);
+        const targetPosition = this.target.mesh.position.clone();
+        const currentPosition = this.mesh.position.clone();
+        const targetDirection = new THREE.Vector3().subVectors(targetPosition, currentPosition).normalize();
+        const targ = new THREE.Quaternion();
+        targ.setFromUnitVectors(new THREE.Vector3(0, 0, 1), targetDirection)
+        this.mesh.quaternion.slerp(targ, 0.05);
+        //this.mesh.lookAt(this.target.mesh.position);
 
         const distanceToTarget = this.mesh.position.distanceTo(this.target.mesh.position);
-        const spring = 0.8;
+        const spring = 0.4;
         this.speed = spring * distanceToTarget;
 
         const forward = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation).multiplyScalar(this.speed);
@@ -85,27 +88,35 @@ export class Boid {
             }
         });
 
+        //aqui, normalizar ou nao, ainda nao decidi
         if (neighborCount > 0) {
             center.divideScalar(neighborCount);
-            const cohesion = new THREE.Vector3().subVectors(center, this.mesh.position).normalize().multiplyScalar(cohesionStrength);
+            const cohesion = new THREE.Vector3().subVectors(center, this.mesh.position)/* .normalize() */.multiplyScalar(cohesionStrength);
             this.velocity.add(cohesion);
 
             avgVelocity.divideScalar(neighborCount);
-            const alignment = avgVelocity.clone().normalize().multiplyScalar(alignmentStrength);
+            const alignment = avgVelocity.clone()/* .normalize() */.multiplyScalar(alignmentStrength);
             this.velocity.add(alignment);
         }
         if (tooCloseCount > 0) {
-            separation.divideScalar(tooCloseCount).normalize();
+            separation.divideScalar(tooCloseCount)/* .normalize() */;
             separation.multiplyScalar(separationStrength);
             this.velocity.add(separation);
         }
 
         this.velocity.multiplyScalar(0.98);
 
-        const maxSpeed = 0.12;
+        const maxSpeed = 0.25;
         if (this.velocity.length() > maxSpeed) {
-            this.velocity.setLength(maxSpeed);
+            this.velocity.setLength(maxSpeed + (Math.random() / 10 - 0.05));
         }
+
+        const jitter = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.01,
+            (Math.random() - 0.5) * 0.01,
+            (Math.random() - 0.5) * 0.01
+        );
+        this.velocity.add(jitter);
 
         this.mesh.position.add(this.velocity);
     }
