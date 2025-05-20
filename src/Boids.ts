@@ -36,16 +36,16 @@ export class Boid {
             Math.random() - 0.5,
             Math.random() - 0.5,
             Math.random() - 0.5
-        ).normalize().multiplyScalar(0.05);
+        ).normalize();
     }
 
-    update(school: Boid[], _index: number) {
+    update(school: Boid[], _index: number, delta: number) {
 
-        const separationStrength = 1.5;
+        const separationStrength = 8;
         const cohesionStrength = 0.008;
         const alignmentStrength = 0.008;
         const steeringStrength = 0.05;
-        const separationRadius = 6;
+        const separationRadius = 10;
         const neighborRadius = 8;
 
         const targetPosition = this.target.mesh.position.clone();
@@ -57,7 +57,7 @@ export class Boid {
         //this.mesh.lookAt(this.target.mesh.position);
 
         const distanceToTarget = this.mesh.position.distanceTo(this.target.mesh.position);
-        const spring = 0.4;
+        const spring = 0.9;
         this.speed = spring * distanceToTarget;
 
         const forward = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation).multiplyScalar(this.speed);
@@ -106,7 +106,7 @@ export class Boid {
 
         this.velocity.multiplyScalar(0.98);
 
-        const maxSpeed = 0.25;
+        const maxSpeed = 60;
         if (this.velocity.length() > maxSpeed) {
             this.velocity.setLength(maxSpeed + (Math.random() / 10 - 0.05));
         }
@@ -118,6 +118,6 @@ export class Boid {
         );
         this.velocity.add(jitter);
 
-        this.mesh.position.add(this.velocity);
+        this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
     }
 }

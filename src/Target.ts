@@ -20,12 +20,12 @@ export class Target {
             Math.random() - 0.5,
             Math.random() - 0.5
         ).normalize();
-        this.velocity = direction.clone().multiplyScalar(SPEED * 0.2);
+        this.velocity = direction.clone().multiplyScalar(SPEED);
 
     }
 
-    update() {
-        this.mesh.position.add(this.velocity);
+    update(delta: number) {
+        this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
 
         (['x', 'y', 'z'] as const).forEach(axis => {
             if (Math.abs(this.mesh.position[axis]) > BOUNDS) {

@@ -5,6 +5,93 @@ import { BOUNDS } from './constants';
 import { SpatialPartition } from './SpatialPartition';
 //@ts-ignore
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import Stats from 'stats.js';
+import { Octree3D } from './Octree3D';
+
+const selector = document.createElement('select');
+selector.id = 'mySelector';
+selector.style.position = 'absolute';
+selector.style.top = '40px';
+selector.style.left = '10px';
+selector.innerHTML = `
+  <option value="spatial" selected>Spatial Partition/Mapping</option>
+  <option value="octree">Octree</option>
+`;
+
+const label = document.createElement('label');
+label.htmlFor = 'mySelector';
+label.textContent = 'Choose a data structure: ';
+label.style.position = 'absolute';
+label.style.top = '10px';
+label.style.left = '10px';
+label.style.color = 'black';
+label.style.fontWeight = 'bold';
+label.style.background = 'rgba(255,255,255,0.7)';
+label.style.padding = '2px 6px';
+label.style.borderRadius = '4px';
+document.body.appendChild(label);
+document.body.appendChild(selector);
+
+
+let choiceData: string = selector.value;
+let choiceView: boolean;
+selector.addEventListener('change', (e) => {
+    choiceData = (e.target as HTMLSelectElement).value;
+    switch (choiceData) {
+        case "spatial":
+            octree.clear();
+            break;
+        case "octree":
+            spatialPartition.reset();
+            break;
+    }
+});
+
+const checkView = document.createElement('input');
+checkView.type = 'checkbox'
+checkView.id = 'checkView'
+checkView.style.position = 'absolute';
+checkView.style.top = '70px';
+checkView.style.left = '10px';
+checkView.style.color = 'black';
+
+const checkLabel = document.createElement('label');
+checkLabel.htmlFor = 'checkView';
+checkLabel.textContent = 'View Structure';
+checkLabel.style.position = 'absolute';
+checkLabel.style.top = '70px';
+checkLabel.style.left = '30px'; // Place it to the right of the checkbox
+checkLabel.style.color = 'black';
+
+document.body.appendChild(checkView);
+document.body.appendChild(checkLabel);
+
+checkView.addEventListener('change', (e) => {
+    const input = e.target as HTMLInputElement;
+    choiceView = input.checked;
+    if (!choiceView) {
+        if (cellVizMesh) {
+            scene.remove(cellVizMesh);
+            cellVizMesh.geometry.dispose();
+            if (Array.isArray(cellVizMesh.material)) {
+                cellVizMesh.material.forEach(mat => mat.dispose());
+            } else {
+                cellVizMesh.material.dispose();
+            }
+            cellVizMesh = null;
+        }
+        if (octree.cellVizMesh) {
+            scene.remove(octree.cellVizMesh);
+            octree.cellVizMesh.geometry.dispose();
+            if (Array.isArray(octree.cellVizMesh.material)) {
+                octree.cellVizMesh.material.forEach(mat => mat.dispose());
+            } else {
+                octree.cellVizMesh.material.dispose();
+            }
+            octree.cellVizMesh = null;
+        }
+    }
+});
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x58baff)
@@ -13,7 +100,7 @@ const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
-    1000
+    700
 );
 
 camera.rotation.order = 'YXZ';
@@ -31,6 +118,13 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+const stats = new Stats();
+stats.showPanel(0);
+stats.dom.style.position = 'absolute';
+stats.dom.style.left = 'unset';
+stats.dom.style.right = '10px';
+stats.dom.style.top = '10px';
+document.body.appendChild(stats.dom);
 
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0); // Center of rotation
@@ -74,8 +168,9 @@ const boids: Boid[][] = [];
 const NUM_BOIDS = 500;
 const NUM_TARGETS = 1;
 
-const cellSize = 8;
+const cellSize = 4;
 const neighborCellsOffset = 2;
+const cellCapacity = 10;
 
 /* function randomPointInSphere(radius: number): THREE.Vector3 {
     let u = Math.random();
@@ -102,11 +197,12 @@ function randomPointInRectangle(): THREE.Vector3 {
 }
 
 const spatialPartition = new SpatialPartition<Boid>(cellSize, neighborCellsOffset);
+const octree = new Octree3D(scene, cellCapacity, BOUNDS * 2, BOUNDS * 2, BOUNDS * 2, cellSize, neighborCellsOffset);
 
 let cellVizMesh: THREE.InstancedMesh | null = null;
 
 
-function cellViz(scene: THREE.Scene) {
+function cellViz(scene: THREE.Scene) { //This should've been an internal function in the SpatialPartition class, but it'd take too much work to change it now
 
     if (cellVizMesh) {
         scene.remove(cellVizMesh);
@@ -192,28 +288,57 @@ loadBoidModel().then(() => {
     animate();
 });
 
+let lastTime = performance.now();
 function animate() {
-    requestAnimationFrame(animate);
+    stats.begin();
 
-    cellViz(scene);
+    const now = performance.now();
+    const delta = (now - lastTime) / 1000;
+    lastTime = now;
 
-    spatialPartition.reset()
+    if (choiceView && choiceData == "spatial") {
+        cellViz(scene);
+    }
+    if (choiceData == "octree") {
+        if (choiceView) {
+            octree.show();
+        }
+        octree.clear();
+        boids.forEach(school => {
+            school.forEach(boid => {
+                octree.insert(boid.mesh.position, boid);
+            });
+        });
+    }
     boids.forEach(school => {
         school.forEach((boid, index) => {
-            const pos = boid.mesh.position
-            const near = spatialPartition.findNear(pos);
-            boid.update(near, index)
-            //spatialPartition.rm(pos, boid);
-            spatialPartition.add(boid.mesh.position, boid);
+            switch (choiceData) {
+                case "spatial":
+                    const prevPos = boid.mesh.position.clone()
+                    const near = spatialPartition.findNear(prevPos);
+                    boid.update(near, index, delta)
+                    spatialPartition.rm(prevPos, boid);
+                    spatialPartition.add(boid.mesh.position, boid);
+                    break;
+                case "octree":
+                    const pos = boid.mesh.position.clone()
+                    const close = octree.findNear(pos) as Boid[];
+                    boid.update(close, index, delta);
+                    break;
+            }
+
 
         }
         )
     });
 
 
-    targets.forEach(target => target.update());
+    targets.forEach(target => target.update(delta));
 
     renderer.render(scene, camera);
+    stats.end();
+
+    requestAnimationFrame(animate);
 }
 
 window.addEventListener('resize', () => {
