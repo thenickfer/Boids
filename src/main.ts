@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Boid, loadBoidModel } from './Boids';
+import { Boid } from './Boids';
 import { Target } from './Target';
 import { BOUNDS } from './constants';
 import { SpatialPartition } from './SpatialPartition';
@@ -7,6 +7,7 @@ import { SpatialPartition } from './SpatialPartition';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import Stats from 'stats.js';
 import { Octree3D } from './Octree3D';
+import { GLTFLoader, GPUComputationRenderer } from 'three/examples/jsm/Addons.js';
 
 const selector = document.createElement('select');
 selector.id = 'mySelector';
@@ -177,50 +178,168 @@ const flooMaterial = new THREE.MeshStandardMaterial({ map: floorTexture })
 const floor = new THREE.Mesh(floorGeometry, flooMaterial);
 floor.rotation.x = -Math.PI / 2;
 floor.position.y = -100;
-//floor.position.z = -100;
 scene.add(floor);
 
-
-const targets: Target[] = [];
-const boids: Boid[][] = [];
-//const SPHERE_RADIUS = 5;
+const boids: Boid[] = [];
+const target = new Target(5, 0xff0000);
 
 const NUM_BOIDS = 1000;
-const NUM_TARGETS = 1;
+
+let instancedMesh: THREE.InstancedMesh | null = null;
+
+const loader = new GLTFLoader();
+loader.load('/assets/fish_low_poly/scene.gltf', (gltf) => {
+    const model = gltf.scene;
+
+    let baseMesh: THREE.Mesh | undefined;
+
+    model.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+            baseMesh = child as THREE.Mesh;
+        }
+    })
+    if (!baseMesh) {
+        console.error("No mesh found in GLTF.");
+        return;
+    }
+
+    const geometry = baseMesh.geometry;
+    const material = baseMesh.material;
+
+    instancedMesh = new THREE.InstancedMesh(geometry, material, NUM_BOIDS);
+    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(instancedMesh);
+
+    for (let i = 0; i < NUM_BOIDS; i++) {
+        boids.push(new Boid(target, i))
+    }
+    animate();
+});
+
+const size = Math.ceil(Math.sqrt(NUM_BOIDS));
+const positionData = new Float32Array(size * size * 4);
+const velocityData = new Float32Array(size * size * 4)
+
+for (let i = 0; i < size * size; i++) {
+    const i4 = i * 4;
+    positionData[i4] = Math.random() * 100 - 50;
+    positionData[i4 + 1] = Math.random() * 100 - 50;
+    positionData[i4 + 2] = Math.random() * 100 - 50;
+    positionData[i4 + 3] = 1.0;
+
+    velocityData[i4] = Math.random() * 2 - 1;
+    velocityData[i4 + 1] = Math.random() * 2 - 1;
+    velocityData[i4 + 2] = Math.random() * 2 - 1;
+    velocityData[i4 + 3] = 1.0;
+}
+
+const posTexture = new THREE.DataTexture(positionData, size, size, THREE.RGBAFormat, THREE.FloatType);
+const velTexture = new THREE.DataTexture(velocityData, size, size, THREE.RGBAFormat, THREE.FloatType);
+posTexture.needsUpdate = true;
+velTexture.needsUpdate = true;
+
 
 const cellSize = 5;
 const neighborCellsOffset = 2;
 const cellCapacity = 10;
-
-/* function randomPointInSphere(radius: number): THREE.Vector3 {
-    let u = Math.random();
-    let v = Math.random();
-    let theta = 2 * Math.PI * u;
-    let phi = Math.acos(2 * v - 1);
-    let r = Math.cbrt(Math.random()) * radius;
-    let sinPhi = Math.sin(phi);
-    return new THREE.Vector3(
-        r * sinPhi * Math.cos(theta),
-        r * sinPhi * Math.sin(theta),
-        r * Math.cos(phi)
-    );
-} */ //Nao vi vantagem em inicializar eles como esfera
-
-function randomPointInRectangle(): THREE.Vector3 {
-    const x = Math.random() * BOUNDS * 2 - BOUNDS;
-    const y = Math.random() * BOUNDS * 2 - BOUNDS;
-    const z = Math.random() * BOUNDS * 2 - BOUNDS;
-
-    return new THREE.Vector3(
-        x, y, z
-    );
-}
 
 const spatialPartition = new SpatialPartition<Boid>(cellSize, neighborCellsOffset);
 const octree = new Octree3D(scene, cellCapacity, BOUNDS * 2, BOUNDS * 2, BOUNDS * 2, cellSize, neighborCellsOffset);
 
 let cellVizMesh: THREE.InstancedMesh | null = null;
 
+
+
+
+let lastTime = performance.now();
+function animate() {
+    stats.begin();
+
+    const now = performance.now();
+    const delta = (now - lastTime) / 1000;
+    lastTime = now;
+
+    /* if (choiceData == "spatial") {
+        if (choiceView) {
+            cellViz(scene);
+        }
+        spatialPartition.reset();
+        boids.forEach(boid => {
+
+            spatialPartition.add(boid.position, boid);
+
+        });
+    }
+    if (choiceData == "octree") {
+        if (choiceView) {
+            octree.show();
+        }
+        octree.clear();
+        boids.forEach(boid => {
+
+            octree.insert(boid.position, boid);
+
+        });
+    } */
+
+    const dummyMatrix = new THREE.Matrix4();
+    const tempQuaternion = new THREE.Quaternion();
+    const tempScale = new THREE.Vector3(1, 1, 1);
+
+    octree.clear()
+    boids.forEach(boid => {
+        octree.insert(boid.position, boid);
+    })
+
+    boids.forEach((boid: Boid, index: number) => {
+
+        const near: Boid[] = octree.findNear(boid.position) as Boid[];
+
+
+        boid.update(near, index, delta);
+
+        dummyMatrix.compose(boid.position, boid.quaternion, tempScale);
+        if (instancedMesh) {
+            instancedMesh.setMatrixAt(index, dummyMatrix);
+        }
+
+
+        /* switch (choiceData) {
+            case "spatial":
+                const prevPos = boid.position.clone()
+                const near = spatialPartition.findNear(prevPos);
+                boid.update(near, index, delta)
+                spatialPartition.rm(prevPos, boid);
+                spatialPartition.add(boid.position, boid);
+                break;
+            case "octree":
+                const pos = boid.position.clone()
+                const close = octree.findNear(pos) as Boid[];
+                boid.update(close, index, delta);
+                break;
+        } */
+
+
+    });
+
+    octree.clear();
+
+    instancedMesh!.instanceMatrix.needsUpdate = true;
+
+    target.update(delta)
+
+    renderer.render(scene, camera);
+    stats.end();
+
+    requestAnimationFrame(animate);
+}
+
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
 function cellViz(scene: THREE.Scene) { //This should've been an internal function in the SpatialPartition class, but it'd take too much work to change it now
 
@@ -288,89 +407,3 @@ function cellViz(scene: THREE.Scene) { //This should've been an internal functio
     cellVizMesh = mesh;
     scene.add(mesh);
 }
-
-loadBoidModel().then(() => {
-    for (let j = 0; j < NUM_TARGETS; j++) {
-        const target = new Target();
-        scene.add(target.mesh);
-        targets.push(target);
-
-        boids[j] = [];
-
-        for (let i = 0; i < NUM_BOIDS; i++) {
-            const boid = new Boid(targets[j]);
-            boid.mesh.position.copy(randomPointInRectangle());
-            scene.add(boid.mesh);
-            boids[j].push(boid);
-            spatialPartition.add(boid.mesh.position, boid);
-        }
-    }
-    animate();
-});
-
-let lastTime = performance.now();
-function animate() {
-    stats.begin();
-
-    const now = performance.now();
-    const delta = (now - lastTime) / 1000;
-    lastTime = now;
-
-    if (choiceData == "spatial") {
-        if (choiceView) {
-            cellViz(scene);
-        }
-        spatialPartition.reset();
-        boids.forEach(school => {
-            school.forEach(boid => {
-                spatialPartition.add(boid.mesh.position, boid);
-            });
-        });
-    }
-    if (choiceData == "octree") {
-        if (choiceView) {
-            octree.show();
-        }
-        octree.clear();
-        boids.forEach(school => {
-            school.forEach(boid => {
-                octree.insert(boid.mesh.position, boid);
-            });
-        });
-    }
-    boids.forEach(school => {
-        school.forEach((boid, index) => {
-            switch (choiceData) {
-                case "spatial":
-                    const prevPos = boid.mesh.position.clone()
-                    const near = spatialPartition.findNear(prevPos);
-                    boid.update(near, index, delta)
-                    spatialPartition.rm(prevPos, boid);
-                    spatialPartition.add(boid.mesh.position, boid);
-                    break;
-                case "octree":
-                    const pos = boid.mesh.position.clone()
-                    const close = octree.findNear(pos) as Boid[];
-                    boid.update(close, index, delta);
-                    break;
-            }
-
-
-        }
-        )
-    });
-
-
-    targets.forEach(target => target.update(delta));
-
-    renderer.render(scene, camera);
-    stats.end();
-
-    requestAnimationFrame(animate);
-}
-
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
