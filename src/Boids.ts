@@ -15,6 +15,11 @@ export function loadBoidModel(): Promise<void> {
     });
 }
 
+const _vec1 = new THREE.Vector3();
+const _vec2 = new THREE.Vector3();
+const _vec3 = new THREE.Vector3();
+const _vec4 = new THREE.Vector3();
+const _quat1 = new THREE.Quaternion();
 export class Boid {
     mesh: THREE.Object3D;
     target: Target;
@@ -41,62 +46,62 @@ export class Boid {
 
     update(school: Boid[], _index: number, delta: number) {
 
-        const separationStrength = 8;
-        const cohesionStrength = 0.008;
+        const separationStrength = 10;
+        const cohesionStrength = 0.005;
         const alignmentStrength = 0.008;
         const steeringStrength = 0.05;
-        const separationRadius = 10;
-        const neighborRadius = 8;
+        const separationRadius = 12;
+        const neighborRadius = 10;
 
-        const targetPosition = this.target.mesh.position.clone();
-        const currentPosition = this.mesh.position.clone();
-        const targetDirection = new THREE.Vector3().subVectors(targetPosition, currentPosition).normalize();
-        const targ = new THREE.Quaternion();
-        targ.setFromUnitVectors(new THREE.Vector3(0, 0, 1), targetDirection)
-        this.mesh.quaternion.slerp(targ, 0.05);
-        //this.mesh.lookAt(this.target.mesh.position);
+        const targetPosition = this.target.mesh.position;
+        const currentPosition = this.mesh.position;
 
-        const distanceToTarget = this.mesh.position.distanceTo(this.target.mesh.position);
-        const spring = 0.9;
-        this.speed = spring * distanceToTarget;
+        _vec1.subVectors(targetPosition, currentPosition).normalize(); // targetDirection
+        _quat1.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _vec1);
+        this.mesh.quaternion.slerp(_quat1, 0.05);
 
-        const forward = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation).multiplyScalar(this.speed);
+        const distanceToTarget = this.mesh.position.distanceTo(targetPosition);
+        this.speed = 0.3 * distanceToTarget;
 
-        const steering = new THREE.Vector3().subVectors(forward, this.velocity);
-        this.velocity.add(steering.multiplyScalar(steeringStrength));
+        _vec2.set(0, 0, 1).applyQuaternion(_quat1).multiplyScalar(this.speed);
+        _vec3.subVectors(_vec2, this.velocity);
+        this.velocity.add(_vec3.multiplyScalar(steeringStrength));
 
 
-        const center = new THREE.Vector3();
+        const center = _vec4.set(0, 0, 0)
         const separation = new THREE.Vector3();
         const avgVelocity = new THREE.Vector3();
         let neighborCount = 0;
         let tooCloseCount = 0;
 
+        const neighborRadiusSq = neighborRadius * neighborRadius;
+        const separationRadiusSq = separationRadius * separationRadius;
+
         school.forEach((boid, index) => {
             if (index !== _index) {
-                const distance = this.mesh.position.distanceTo(boid.mesh.position);
-                if (distance < neighborRadius) {
-                    center.add(boid.mesh.position);
+                const otherPos = boid.mesh.position;
+                const distanceSq = this.mesh.position.distanceToSquared(otherPos); //Usar isso melhorou um pouco a performance
+                if (distanceSq < neighborRadiusSq) {
+                    center.add(otherPos);
                     avgVelocity.add(boid.velocity);
                     neighborCount++;
                 }
-                if (distance < separationRadius && distance > 0) {
+                if (distanceSq < separationRadiusSq && distanceSq > 0) {
                     tooCloseCount++;
-                    const dist = new THREE.Vector3().subVectors(this.mesh.position, boid.mesh.position);
-                    separation.add(dist.normalize().divideScalar(distance));
+                    _vec1.subVectors(this.mesh.position, otherPos).normalize().divideScalar(Math.sqrt(distanceSq));
+                    separation.add(_vec1);
                 }
             }
         });
 
         //aqui, normalizar ou nao, ainda nao decidi
         if (neighborCount > 0) {
-            center.divideScalar(neighborCount);
-            const cohesion = new THREE.Vector3().subVectors(center, this.mesh.position)/* .normalize() */.multiplyScalar(cohesionStrength);
-            this.velocity.add(cohesion);
+            center.divideScalar(neighborCount);//coesao
+            _vec1.subVectors(center, this.mesh.position)/* .normalize() */.multiplyScalar(cohesionStrength);
+            this.velocity.add(_vec1);
 
-            avgVelocity.divideScalar(neighborCount);
-            const alignment = avgVelocity.clone()/* .normalize() */.multiplyScalar(alignmentStrength);
-            this.velocity.add(alignment);
+            avgVelocity.divideScalar(neighborCount).multiplyScalar(alignmentStrength);
+            this.velocity.add(avgVelocity);//alinhamento
         }
         if (tooCloseCount > 0) {
             separation.divideScalar(tooCloseCount)/* .normalize() */;
@@ -106,18 +111,18 @@ export class Boid {
 
         this.velocity.multiplyScalar(0.98);
 
-        const maxSpeed = 60;
-        if (this.velocity.length() > maxSpeed) {
+        const maxSpeed = 90;
+        if (this.velocity.lengthSq() > maxSpeed * maxSpeed) {
             this.velocity.setLength(maxSpeed + (Math.random() / 10 - 0.05));
         }
 
-        const jitter = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.01,
-            (Math.random() - 0.5) * 0.01,
-            (Math.random() - 0.5) * 0.01
-        );
-        this.velocity.add(jitter);
+        this.velocity.y * 0.9;
 
-        this.mesh.position.add(this.velocity.clone().multiplyScalar(delta));
+        this.velocity.x += (Math.random() - 0.5) * 0.01;
+        this.velocity.y += (Math.random() - 0.5) * 0.01;
+        this.velocity.z += (Math.random() - 0.5) * 0.01;
+
+        _vec1.copy(this.velocity).multiplyScalar(delta)
+        this.mesh.position.add(_vec1);
     }
 }

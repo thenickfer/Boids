@@ -185,12 +185,12 @@ const targets: Target[] = [];
 const boids: Boid[][] = [];
 //const SPHERE_RADIUS = 5;
 
-const NUM_BOIDS = 1000;
-const NUM_TARGETS = 1;
+const NUM_BOIDS = 200;
+const NUM_TARGETS = 5;
 
 const cellSize = 5;
 const neighborCellsOffset = 2;
-const cellCapacity = 10;
+const cellCapacity = 5;
 
 /* function randomPointInSphere(radius: number): THREE.Vector3 {
     let u = Math.random();
@@ -308,6 +308,11 @@ loadBoidModel().then(() => {
     animate();
 });
 
+const _tmpPos = new THREE.Vector3();
+let frameCount = 0;
+const UPDATE_INTERVAL = 1;
+
+
 let lastTime = performance.now();
 function animate() {
     stats.begin();
@@ -316,41 +321,46 @@ function animate() {
     const delta = (now - lastTime) / 1000;
     lastTime = now;
 
-    if (choiceData == "spatial") {
-        if (choiceView) {
-            cellViz(scene);
+    frameCount++;
+
+    if (frameCount % UPDATE_INTERVAL === 0) {
+        frameCount = 0;
+        if (choiceData === "spatial") {
+            if (choiceView) {
+                cellViz(scene);
+            }
+            spatialPartition.reset();
+            for (const school of boids) {
+                for (const boid of school) {
+                    spatialPartition.add(boid.mesh.position, boid);
+                }
+            }
         }
-        spatialPartition.reset();
-        boids.forEach(school => {
-            school.forEach(boid => {
-                spatialPartition.add(boid.mesh.position, boid);
-            });
-        });
-    }
-    if (choiceData == "octree") {
-        if (choiceView) {
-            octree.show();
+
+        if (choiceData === "octree") {
+            if (choiceView) {
+                octree.show();
+            }
+            octree.clear();
+            for (const school of boids) {
+                for (const boid of school) {
+                    octree.insert(boid.mesh.position, boid);
+                }
+            }
         }
-        octree.clear();
-        boids.forEach(school => {
-            school.forEach(boid => {
-                octree.insert(boid.mesh.position, boid);
-            });
-        });
     }
     boids.forEach(school => {
         school.forEach((boid, index) => {
+            _tmpPos.copy(boid.mesh.position);
             switch (choiceData) {
                 case "spatial":
-                    const prevPos = boid.mesh.position.clone()
-                    const near = spatialPartition.findNear(prevPos);
+                    const near = spatialPartition.findNear(_tmpPos);
                     boid.update(near, index, delta)
-                    spatialPartition.rm(prevPos, boid);
+                    spatialPartition.rm(_tmpPos, boid);
                     spatialPartition.add(boid.mesh.position, boid);
                     break;
                 case "octree":
-                    const pos = boid.mesh.position.clone()
-                    const close = octree.findNear(pos) as Boid[];
+                    const close = octree.findNear(_tmpPos) as Boid[];
                     boid.update(close, index, delta);
                     break;
             }
