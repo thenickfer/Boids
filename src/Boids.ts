@@ -34,9 +34,9 @@ export class Boid {
         this.mesh = model?.clone(true) ?? new THREE.Mesh(
             new THREE.BoxGeometry(0.5, 0.5, 2),
             new THREE.MeshPhongMaterial({
-                color: 0xFFA500,
+                color: 0x00FFFF,
                 shininess: 100,
-                specular: 0xAA00AA
+                specular: 0xFF00AA
             })
         );
         this.mesh.scale.set(1.5, 1.5, 1.5);
@@ -54,7 +54,7 @@ export class Boid {
 
     update(school: Boid[], _index: number, delta: number) {
 
-        const separationStrength = 10;
+        const separationStrength = 12;
         const cohesionStrength = 0.005;
         const alignmentStrength = 0.008;
         const steeringStrength = 0.05;
@@ -69,7 +69,7 @@ export class Boid {
         this.mesh.quaternion.slerp(_quat1, 0.05);
 
         const distanceToTarget = this.mesh.position.distanceTo(targetPosition);
-        this.speed = 0.1 * distanceToTarget;
+        this.speed = 0.2 * distanceToTarget;
 
         _vec2.set(0, 0, 1).applyQuaternion(_quat1).multiplyScalar(this.speed);
         _vec3.subVectors(_vec2, this.velocity);
