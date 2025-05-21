@@ -40,9 +40,29 @@ selector.addEventListener('change', (e) => {
     switch (choiceData) {
         case "spatial":
             octree.clear();
+            if (octree.cellVizMesh) {
+                scene.remove(octree.cellVizMesh);
+                octree.cellVizMesh.geometry.dispose();
+                if (Array.isArray(octree.cellVizMesh.material)) {
+                    octree.cellVizMesh.material.forEach(mat => mat.dispose());
+                } else {
+                    octree.cellVizMesh.material.dispose();
+                }
+                octree.cellVizMesh = null;
+            }
             break;
         case "octree":
             spatialPartition.reset();
+            if (cellVizMesh) {
+                scene.remove(cellVizMesh);
+                cellVizMesh.geometry.dispose();
+                if (Array.isArray(cellVizMesh.material)) {
+                    cellVizMesh.material.forEach(mat => mat.dispose());
+                } else {
+                    cellVizMesh.material.dispose();
+                }
+                cellVizMesh = null;
+            }
             break;
     }
 });
@@ -165,10 +185,10 @@ const targets: Target[] = [];
 const boids: Boid[][] = [];
 //const SPHERE_RADIUS = 5;
 
-const NUM_BOIDS = 500;
+const NUM_BOIDS = 1000;
 const NUM_TARGETS = 1;
 
-const cellSize = 4;
+const cellSize = 5;
 const neighborCellsOffset = 2;
 const cellCapacity = 10;
 
@@ -296,8 +316,16 @@ function animate() {
     const delta = (now - lastTime) / 1000;
     lastTime = now;
 
-    if (choiceView && choiceData == "spatial") {
-        cellViz(scene);
+    if (choiceData == "spatial") {
+        if (choiceView) {
+            cellViz(scene);
+        }
+        spatialPartition.reset();
+        boids.forEach(school => {
+            school.forEach(boid => {
+                spatialPartition.add(boid.mesh.position, boid);
+            });
+        });
     }
     if (choiceData == "octree") {
         if (choiceView) {

@@ -8,7 +8,7 @@ export class Target {
     velocity: THREE.Vector3;
     constructor(radius = 15, color = 0xff0000) {
         const geometry = new THREE.SphereGeometry(radius, 16, 16);
-        const material = new THREE.MeshStandardMaterial({ color });
+        const material = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0.2 });
         this.mesh = new THREE.Mesh(geometry, material);
         this.mesh.position.copy(new THREE.Vector3(
             Math.random() * BOUNDS * 2 - BOUNDS,
