@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { Target } from './Target';
+import { BOUNDS, BOUNDS_SOFTNESS, BOUNDS_STRENGTH } from './constants';
 
 let model: THREE.Object3D | null = null;
 
-export function loadBoidModel(): Promise<void> {
+export function loadBoidModel(confirm: boolean): Promise<void> {
+    if (!confirm) {
+        return Promise.resolve();
+    }
     return new Promise((resolve, reject) => {
         const loader = new GLTFLoader();
         loader.load('/assets/fish_low_poly/scene.gltf', (gltf) => {
@@ -28,10 +32,14 @@ export class Boid {
     constructor(target: Target) {
 
         this.mesh = model?.clone(true) ?? new THREE.Mesh(
-            new THREE.ConeGeometry(0.1, 8, 8),
-            new THREE.MeshBasicMaterial({ color: 0x000A1A })
+            new THREE.BoxGeometry(0.5, 0.5, 2),
+            new THREE.MeshPhongMaterial({
+                color: 0xFFA500,
+                shininess: 100,
+                specular: 0xAA00AA
+            })
         );
-        this.mesh.scale.set(1, 1, 1);
+        this.mesh.scale.set(1.5, 1.5, 1.5);
 
         this.speed = 0;
 
@@ -56,12 +64,12 @@ export class Boid {
         const targetPosition = this.target.mesh.position;
         const currentPosition = this.mesh.position;
 
-        _vec1.subVectors(targetPosition, currentPosition).normalize(); // targetDirection
+        _vec1.subVectors(targetPosition, currentPosition).normalize().multiplyScalar(0.9);
         _quat1.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _vec1);
         this.mesh.quaternion.slerp(_quat1, 0.05);
 
         const distanceToTarget = this.mesh.position.distanceTo(targetPosition);
-        this.speed = 0.3 * distanceToTarget;
+        this.speed = 0.1 * distanceToTarget;
 
         _vec2.set(0, 0, 1).applyQuaternion(_quat1).multiplyScalar(this.speed);
         _vec3.subVectors(_vec2, this.velocity);
@@ -109,9 +117,9 @@ export class Boid {
             this.velocity.add(separation);
         }
 
-        this.velocity.multiplyScalar(0.98);
+        this.velocity.multiplyScalar(1.2);
 
-        const maxSpeed = 90;
+        const maxSpeed = 65;
         if (this.velocity.lengthSq() > maxSpeed * maxSpeed) {
             this.velocity.setLength(maxSpeed + (Math.random() / 10 - 0.05));
         }
@@ -122,7 +130,18 @@ export class Boid {
         this.velocity.y += (Math.random() - 0.5) * 0.01;
         this.velocity.z += (Math.random() - 0.5) * 0.01;
 
+        const pos = this.mesh.position;
+        (['x', 'y', 'z'] as const).forEach(coord => {
+            if (pos[coord] > BOUNDS - BOUNDS_SOFTNESS) {
+                this.velocity[coord] -= (pos[coord] - (BOUNDS - BOUNDS_SOFTNESS)) * (BOUNDS_STRENGTH / BOUNDS_SOFTNESS);
+            } else if (pos[coord] < BOUNDS_SOFTNESS - BOUNDS) {
+                this.velocity[coord] += (-(BOUNDS - BOUNDS_SOFTNESS) - pos[coord]) * (BOUNDS_STRENGTH / BOUNDS_SOFTNESS);
+            }
+        })
+
         _vec1.copy(this.velocity).multiplyScalar(delta)
-        this.mesh.position.add(_vec1);
+
+        pos.add(_vec1);
+
     }
 }

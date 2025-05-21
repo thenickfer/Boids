@@ -120,7 +120,7 @@ const camera = new THREE.PerspectiveCamera(
     60,
     window.innerWidth / window.innerHeight,
     0.1,
-    700
+    1000
 );
 
 camera.rotation.order = 'YXZ';
@@ -150,7 +150,7 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0, 0); // Center of rotation
 controls.update();
 
-const sceneGeometry = new THREE.BoxGeometry(200, 200, 200);
+const sceneGeometry = new THREE.BoxGeometry(BOUNDS * 2, BOUNDS * 2, BOUNDS * 2);
 const sceneEdges = new THREE.EdgesGeometry(sceneGeometry);
 const lines = new THREE.LineSegments(
     sceneEdges,
@@ -163,11 +163,11 @@ const ambientLight = new THREE.AmbientLight(0xffffff, 2);
 scene.add(ambientLight);
 
 const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-directionalLight.position.set(5, 10, 100);
+directionalLight.position.set(0, 1, 0);
 scene.add(directionalLight);
 
 const pointLight = new THREE.PointLight(0xffffff, 1);
-pointLight.position.set(-5, -10, 10);
+pointLight.position.set(0, 0, 0);
 scene.add(pointLight);
 
 
@@ -176,7 +176,7 @@ const floorGeometry = new THREE.PlaneGeometry(BOUNDS * 2, BOUNDS * 2);
 const flooMaterial = new THREE.MeshStandardMaterial({ map: floorTexture })
 const floor = new THREE.Mesh(floorGeometry, flooMaterial);
 floor.rotation.x = -Math.PI / 2;
-floor.position.y = -100;
+floor.position.y = -BOUNDS;
 //floor.position.z = -100;
 scene.add(floor);
 
@@ -185,8 +185,8 @@ const targets: Target[] = [];
 const boids: Boid[][] = [];
 //const SPHERE_RADIUS = 5;
 
-const NUM_BOIDS = 200;
-const NUM_TARGETS = 5;
+const NUM_BOIDS = 1000;
+const NUM_TARGETS = 1;
 
 const cellSize = 5;
 const neighborCellsOffset = 2;
@@ -289,7 +289,7 @@ function cellViz(scene: THREE.Scene) { //This should've been an internal functio
     scene.add(mesh);
 }
 
-loadBoidModel().then(() => {
+loadBoidModel(false).then(() => {
     for (let j = 0; j < NUM_TARGETS; j++) {
         const target = new Target();
         scene.add(target.mesh);
@@ -369,6 +369,7 @@ function animate() {
         }
         )
     });
+
 
 
     targets.forEach(target => target.update(delta));
