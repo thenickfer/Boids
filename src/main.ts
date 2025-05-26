@@ -311,7 +311,7 @@ loadBoidModel(false).then(() => {
 const _tmpPos = new THREE.Vector3();
 let frameCount = 0;
 const UPDATE_INTERVAL = 1;
-const MAX_DELTA = 0.05;
+const MAX_DELTA = 0.07;
 
 let lastTime = performance.now();
 function animate() {
