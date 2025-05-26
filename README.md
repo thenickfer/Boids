@@ -1,5 +1,6 @@
 This was a shorter personal project with the objective of actually applying some concepts I've been learning during the 3rd semester of my CS bachelor's, mostly for comparing the performance of different data structures such as HashMaps and Octrees;
 
+In the future i plan to run more of the code on the gpu, but i currently have no experience with GPGPU so it would be a huge step up.
 
 References:
 
