@@ -7,6 +7,7 @@ import { SpatialPartition } from './SpatialPartition';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import Stats from 'stats.js';
 import { Octree3D } from './Octree3D';
+import { Predator } from './Predator';
 
 const selector = document.createElement('select');
 selector.id = 'mySelector';
@@ -186,7 +187,7 @@ const boids: Boid[][] = [];
 //const SPHERE_RADIUS = 5;
 
 const NUM_BOIDS = 1000;
-const NUM_TARGETS = 1;
+const NUM_TARGETS = 2;
 
 const cellSize = 5;
 const neighborCellsOffset = 2;
@@ -237,7 +238,7 @@ function cellViz(scene: THREE.Scene) { //This should've been an internal functio
 
     const occupiedCells = Array.from(spatialPartition["_spatialPartitionGrid"].entries())
         .filter(([_, value]) => value !== null)
-        .map(([key, value]) => [key.split(',').map(Number), value]);
+        .map(([key, value]) => [[key / 100000, key % 100000 / 1000, key % 100000 % 1000], value]);//used to be key.split(',').map(number) but ive since removed the strings from the logic
 
     if (occupiedCells.length === 0) return;
 
@@ -288,30 +289,35 @@ function cellViz(scene: THREE.Scene) { //This should've been an internal functio
     cellVizMesh = mesh;
     scene.add(mesh);
 }
-
+let predator: Predator;
 loadBoidModel(false).then(() => {
-    for (let j = 0; j < NUM_TARGETS; j++) {
+
+    for (let i = 0; i < NUM_TARGETS; i++) {
         const target = new Target();
         scene.add(target.mesh);
         targets.push(target);
-
-        boids[j] = [];
-
-        for (let i = 0; i < NUM_BOIDS; i++) {
-            const boid = new Boid(targets[j]);
-            boid.mesh.position.copy(randomPointInRectangle());
-            scene.add(boid.mesh);
-            boids[j].push(boid);
-            spatialPartition.add(boid.mesh.position, boid);
-        }
     }
+
+    boids[0] = [];
+
+    for (let i = 0; i < NUM_BOIDS; i++) {
+        const boid = new Boid(targets[0]);
+        boid.mesh.position.copy(randomPointInRectangle());
+        scene.add(boid.mesh);
+        boids[0].push(boid);
+        spatialPartition.add(boid.mesh.position, boid);
+    }
+
+    predator = new Predator(targets[1]);
+    scene.add(predator.mesh);
+
     animate();
 });
-
 const _tmpPos = new THREE.Vector3();
 let frameCount = 0;
 const UPDATE_INTERVAL = 1;
 const MAX_DELTA = 0.07;
+
 
 let lastTime = performance.now();
 function animate() {
@@ -370,7 +376,14 @@ function animate() {
         )
     });
 
-
+    switch (choiceData) {
+        case "spatial":
+            predator.update(delta, spatialPartition.findNear(predator.mesh.position))
+            break;
+        case "octree":
+            predator.update(delta, octree.findNear(predator.mesh.position) as Boid[])
+            break;
+    }
 
     targets.forEach(target => target.update(delta));
 

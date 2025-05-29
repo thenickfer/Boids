@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 export class SpatialPartition<B> {
-    private _spatialPartitionGrid: Map<string, B[]>;
+    private _spatialPartitionGrid: Map<number, B[]>;
     private _objectCellMap: Map<B, THREE.Vector3>;
     private cellSize: number;
     private neighborCellsOffset: number;
 
     constructor(cellSize: number, neighborCellsOffset: number) {
-        this._spatialPartitionGrid = new Map<string, B[]>();
+        this._spatialPartitionGrid = new Map<number, B[]>();
         this._objectCellMap = new Map<B, THREE.Vector3>();
 
         this.cellSize = cellSize;
@@ -25,7 +25,8 @@ export class SpatialPartition<B> {
                         index.y + y,
                         index.z + z
                     );
-                    const key = `${neighborIndex.x},${neighborIndex.y},${neighborIndex.z}`;
+                    const key = neighborIndex.x * 100000 + neighborIndex.y * 1000 + neighborIndex.z;//changing from String to number logic gained almost 20% performance
+                    //const key = `${neighborIndex.x},${neighborIndex.y},${neighborIndex.z}`; 
                     this._spatialPartitionGrid.get(key)?.forEach((obj: B) => {
                         results.push(obj);
                     })
@@ -61,8 +62,9 @@ export class SpatialPartition<B> {
     }
 
     private addByIndex(index: THREE.Vector3, obj: B) {
-        const key = `${index.x},${index.y},${index.z}`;
-
+        //const key = `${index.x},${index.y},${index.z}`;
+        //Problema com indexes negativos
+        const key = index.x * 100000 + index.y * 1000 + index.z;
         const prevIndex = this._objectCellMap.get(obj);
         if (prevIndex && !prevIndex.equals(index)) {
             this.rmByIndex(prevIndex, obj);
@@ -77,7 +79,8 @@ export class SpatialPartition<B> {
     }
 
     private rmByIndex(index: THREE.Vector3, obj: B) {
-        const key = `${index.x},${index.y},${index.z}`;
+        //const key = `${index.x},${index.y},${index.z}`;
+        const key = index.x * 100000 + index.y * 1000 + index.z;
         if (this._spatialPartitionGrid.has(key)) {
             const arr = this._spatialPartitionGrid.get(key)!;
             const i = arr.indexOf(obj);

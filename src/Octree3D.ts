@@ -217,5 +217,4 @@ export class Octree3D<B> {
         return this.root.findNear(range);
 
     }
-
 }
