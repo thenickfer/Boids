@@ -238,7 +238,7 @@ function cellViz(scene: THREE.Scene) { //This should've been an internal functio
 
     const occupiedCells = Array.from(spatialPartition["_spatialPartitionGrid"].entries())
         .filter(([_, value]) => value !== null)
-        .map(([key, value]) => [[key / 100000, key % 100000 / 1000, key % 100000 % 1000], value]);//used to be key.split(',').map(number) but ive since removed the strings from the logic
+        .map(([key, value]) => [key.split(',').map(Number), value]);
 
     if (occupiedCells.length === 0) return;
 
