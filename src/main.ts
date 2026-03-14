@@ -235,9 +235,18 @@ function cellViz(scene: THREE.Scene) { //This should've been an internal functio
         cellVizMesh = null;
     }
 
-    const occupiedCells = Array.from(spatialPartition["_spatialPartitionGrid"].entries())
+    const occupiedCells = [] /* Array.from(spatialPartition["_spatialPartitionGrid"].entries())
         .filter(([_, value]) => value !== null)
-        .map(([key, value]) => [key.split(',').map(Number), value]);
+        .map(([key, value]) => [key.split(',').map(Number), value]); */
+    const grid = spatialPartition["_spatialPartitionGrid"];
+    for (const [x, yMap] of grid) {
+        for (const [y, zMap] of yMap) {
+            for (const [z, arr] of zMap) {
+                if (arr !== null && arr.length > 0) occupiedCells.push([[x, y, z], arr]);
+            }
+        }
+    }
+
 
     if (occupiedCells.length === 0) return;
 
@@ -329,7 +338,7 @@ function animate() {
             if (choiceView) {
                 cellViz(scene);
             }
-            spatialPartition.reset();
+            spatialPartition.reset(); //technically no need to reset, it would still work, but after testing, performance seems to be better this way
             for (const school of boids) {
                 for (const boid of school) {
                     spatialPartition.add(boid.mesh.position, boid);
