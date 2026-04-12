@@ -23,13 +23,15 @@ const _vec1 = new THREE.Vector3();
 const _vec2 = new THREE.Vector3();
 const _vec3 = new THREE.Vector3();
 const _vec4 = new THREE.Vector3();
+const _vec5 = new THREE.Vector3();
 const _quat1 = new THREE.Quaternion();
+const _forward = new THREE.Vector3(0, 0, 1);
 export class Boid {
     mesh: THREE.Object3D;
-    target: Target;
+    target: Target | null;
     speed: number;
     velocity: THREE.Vector3;
-    constructor(target: Target) {
+    constructor(target: Target | null) {
 
         this.mesh = model?.clone(true) ?? new THREE.Mesh(
             new THREE.BoxGeometry(0.5, 0.5, 2),
@@ -41,7 +43,7 @@ export class Boid {
         );
         this.mesh.scale.set(1.5, 1.5, 1.5);
 
-        this.speed = 0;
+        this.speed = 100;
 
         this.target = target;
 
@@ -52,28 +54,35 @@ export class Boid {
         ).normalize();
     }
 
-    update(school: Boid[], _index: number, delta: number) {
+    update(school: Boid[], _index: number, delta: number, separationStr: number, cohesionStr: number, alignmentStr: number) {
 
-        const separationStrength = 12;
-        const cohesionStrength = 0.005;
-        const alignmentStrength = 0.008;
-        const steeringStrength = 0.05;
-        const separationRadius = 12;
-        const neighborRadius = 10;
+        const separationStrength = Number.isFinite(separationStr) ? separationStr : 4;
+        const cohesionStrength = Number.isFinite(cohesionStr) ? cohesionStr : 0.012;
+        const alignmentStrength = Number.isFinite(alignmentStr) ? alignmentStr : 0.03;
+        const steeringStrength = 0.08;
+        const separationRadius = 6;
+        const neighborRadius = 14;
+        const linearDamping = 0;
+        const quadraticDrag = 0.001;
+        const maxAcceleration = 45;
+        const dtScale = Math.min(delta * 60, 2);
+        const targetMaxSpeed = 24;
 
-        const targetPosition = this.target.mesh.position;
-        const currentPosition = this.mesh.position;
+        _vec5.copy(this.velocity);
 
-        _vec1.subVectors(targetPosition, currentPosition).normalize().multiplyScalar(0.9);
-        _quat1.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _vec1);
-        this.mesh.quaternion.slerp(_quat1, 0.05);
+        if (this.target) {
+            const targetPosition = this.target.mesh.position;
+            const currentPosition = this.mesh.position;
 
-        const distanceToTarget = this.mesh.position.distanceTo(targetPosition);
-        this.speed = 0.2 * distanceToTarget;
+            _vec1.subVectors(targetPosition, currentPosition).normalize().multiplyScalar(0.9);
 
-        _vec2.set(0, 0, 1).applyQuaternion(_quat1).multiplyScalar(this.speed);
-        _vec3.subVectors(_vec2, this.velocity);
-        this.velocity.add(_vec3.multiplyScalar(steeringStrength));
+            const distanceToTarget = this.mesh.position.distanceTo(targetPosition);
+            this.speed = Math.min(targetMaxSpeed, 0.2 * distanceToTarget);
+
+            _vec2.copy(_vec1).multiplyScalar(this.speed);
+            _vec3.subVectors(_vec2, this.velocity);
+            this.velocity.add(_vec3.multiplyScalar(steeringStrength * dtScale));
+        }
 
 
         const center = _vec4.set(0, 0, 0)
@@ -105,43 +114,63 @@ export class Boid {
         //aqui, normalizar ou nao, ainda nao decidi
         if (neighborCount > 0) {
             center.divideScalar(neighborCount);//coesao
-            _vec1.subVectors(center, this.mesh.position)/* .normalize() */.multiplyScalar(cohesionStrength);
+            _vec1.subVectors(center, this.mesh.position)/* .normalize() */.multiplyScalar(cohesionStrength * dtScale);
             this.velocity.add(_vec1);
 
-            avgVelocity.divideScalar(neighborCount).multiplyScalar(alignmentStrength);
-            this.velocity.add(avgVelocity);//alinhamento
+            avgVelocity.divideScalar(neighborCount);
+            _vec1.subVectors(avgVelocity, this.velocity).multiplyScalar(alignmentStrength * dtScale);
+            this.velocity.add(_vec1);//alinhamento (steering, not raw speed injection)
         }
         if (tooCloseCount > 0) {
             separation.divideScalar(tooCloseCount)/* .normalize() */;
-            separation.multiplyScalar(separationStrength);
+            separation.multiplyScalar(separationStrength * dtScale);
             this.velocity.add(separation);
         }
 
-        this.velocity.multiplyScalar(1.2);
-
-        const maxSpeed = 65;
-        if (this.velocity.lengthSq() > maxSpeed * maxSpeed) {
-            this.velocity.setLength(maxSpeed + (Math.random() / 10 - 0.05));
+        this.velocity.multiplyScalar(Math.exp(-linearDamping * delta));
+        const speed = this.velocity.length();
+        if (speed > 1e-6) {
+            this.velocity.multiplyScalar(1 / (1 + quadraticDrag * speed * delta));
         }
 
-        this.velocity.y * 0.9;
+        this.velocity.y *= Math.exp(-0.6 * delta);
 
-        this.velocity.x += (Math.random() - 0.5) * 0.01;
-        this.velocity.y += (Math.random() - 0.5) * 0.01;
-        this.velocity.z += (Math.random() - 0.5) * 0.01;
+        this.velocity.x += (Math.random() - 0.5) * 0.0015;
+        this.velocity.y += (Math.random() - 0.5) * 0.0015;
+        this.velocity.z += (Math.random() - 0.5) * 0.0015;
+
+        // Limit per-step change in velocity instead of clipping absolute speed.
+        const maxDeltaV = maxAcceleration * Math.max(delta, 1e-6);
+        _vec3.subVectors(this.velocity, _vec5);
+        if (_vec3.lengthSq() > maxDeltaV * maxDeltaV) {
+            _vec3.setLength(maxDeltaV);
+            this.velocity.copy(_vec5).add(_vec3);
+        }
 
         const pos = this.mesh.position;
+        const softZone = Math.max(BOUNDS_SOFTNESS, 8);
+        const innerBound = BOUNDS - softZone;
+        const boundaryGain = (BOUNDS_STRENGTH / softZone) * dtScale;
+
         (['x', 'y', 'z'] as const).forEach(coord => {
-            if (pos[coord] > BOUNDS - BOUNDS_SOFTNESS) {
-                this.velocity[coord] -= (pos[coord] - (BOUNDS - BOUNDS_SOFTNESS)) * (BOUNDS_STRENGTH / BOUNDS_SOFTNESS);
-            } else if (pos[coord] < BOUNDS_SOFTNESS - BOUNDS) {
-                this.velocity[coord] += (-(BOUNDS - BOUNDS_SOFTNESS) - pos[coord]) * (BOUNDS_STRENGTH / BOUNDS_SOFTNESS);
+            const nextPos = pos[coord] + this.velocity[coord] * delta;
+            if (nextPos > innerBound) {
+                this.velocity[coord] -= (nextPos - innerBound) * boundaryGain;
+            } else if (nextPos < -innerBound) {
+                this.velocity[coord] += (-innerBound - nextPos) * boundaryGain;
             }
-        })
+        });
 
         _vec1.copy(this.velocity).multiplyScalar(delta)
 
         pos.add(_vec1);
+
+        // Keep orientation synced with movement even when target following is disabled.
+        if (this.velocity.lengthSq() > 1e-6) {
+            _vec1.copy(this.velocity).normalize();
+            _quat1.setFromUnitVectors(_forward, _vec1);
+            this.mesh.quaternion.slerp(_quat1, 0.1);
+        }
 
     }
 }
