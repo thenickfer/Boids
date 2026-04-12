@@ -43,7 +43,7 @@ export class Boid {
         );
         this.mesh.scale.set(1.5, 1.5, 1.5);
 
-        this.speed = 100;
+        this.speed = 1000;
 
         this.target = target;
 
@@ -64,7 +64,7 @@ export class Boid {
         const neighborRadius = 14;
         const linearDamping = 0;
         const quadraticDrag = 0.001;
-        const maxAcceleration = 45;
+        const maxAcceleration = 100;
         const dtScale = Math.min(delta * 60, 2);
         const targetMaxSpeed = 24;
 
