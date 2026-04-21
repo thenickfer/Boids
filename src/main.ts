@@ -149,6 +149,91 @@ behaviorControls.appendChild(cohesionLabel);
 behaviorControls.appendChild(alignmentLabel);
 document.body.appendChild(behaviorControls);
 
+const metricsControls = document.createElement('fieldset');
+metricsControls.id = 'metricsControls';
+metricsControls.style.position = 'absolute';
+metricsControls.style.top = '260px';
+// metricsControls.style.left = '150px';
+metricsControls.style.background = 'rgba(255,255,255,0.7)';
+metricsControls.style.borderRadius = '4px';
+
+const metricsLegend = document.createElement('legend');
+metricsLegend.textContent = 'Metrics';
+metricsControls.appendChild(metricsLegend);
+
+const flockingRadiusInput = document.createElement('input');
+flockingRadiusInput.type = 'text';
+flockingRadiusInput.value = '-';
+flockingRadiusInput.readOnly = true;
+flockingRadiusInput.style.width = '180px';
+
+const polarizationInput = document.createElement('input');
+polarizationInput.type = 'text';
+polarizationInput.value = '-';
+polarizationInput.readOnly = true;
+polarizationInput.style.width = '180px';
+
+const angularMomentumInput = document.createElement('input');
+angularMomentumInput.type = 'text';
+angularMomentumInput.value = '-';
+angularMomentumInput.readOnly = true;
+angularMomentumInput.style.width = '180px';
+
+const dispersionInput = document.createElement('input');
+dispersionInput.type = 'text';
+dispersionInput.value = '-';
+dispersionInput.readOnly = true;
+dispersionInput.style.width = '180px';
+
+const averageSpeedInput = document.createElement('input');
+averageSpeedInput.type = 'text';
+averageSpeedInput.value = '-';
+averageSpeedInput.readOnly = true;
+averageSpeedInput.style.width = '180px';
+
+//Flocking Radius, Determines how closely boids are grouped together by calculating 
+// the mean distance from each boid to the center of mass
+const flockingRadiusLabel = document.createElement('label');
+flockingRadiusLabel.textContent = 'Flocking Radius/Clustering';
+flockingRadiusLabel.style.display = 'block';
+flockingRadiusLabel.appendChild(flockingRadiusInput);
+
+// Group Polarization, Measures the overall alignment of the flock. It is calculated by 
+// taking the absolute value of the average velocity vector of all boids
+const polarizationLabel = document.createElement('label');
+polarizationLabel.textContent = 'Group Polarization';
+polarizationLabel.style.display = 'block';
+polarizationLabel.appendChild(polarizationInput);
+
+// Group Angular Momentum, Measures the degree of rotation (swirling) of the group around its center
+const angularMomentumLabel = document.createElement('label');
+angularMomentumLabel.textContent = 'Group Angular Momentum';
+angularMomentumLabel.style.display = 'block';
+angularMomentumLabel.appendChild(angularMomentumInput);
+
+const dispersionLabel = document.createElement('label');
+dispersionLabel.textContent = 'Dispersion';
+dispersionLabel.style.display = 'block';
+dispersionLabel.appendChild(dispersionInput);
+
+const averageSpeedLabel = document.createElement('label');
+averageSpeedLabel.textContent = 'Average Speed';
+averageSpeedLabel.style.display = 'block';
+averageSpeedLabel.appendChild(averageSpeedInput);
+
+const calculateMetricsButton = document.createElement('button');
+calculateMetricsButton.type = 'button';
+calculateMetricsButton.textContent = 'Calculate Metrics';
+calculateMetricsButton.style.marginTop = '6px';
+
+metricsControls.appendChild(flockingRadiusLabel);
+metricsControls.appendChild(polarizationLabel);
+metricsControls.appendChild(angularMomentumLabel);
+metricsControls.appendChild(dispersionLabel);
+metricsControls.appendChild(averageSpeedLabel);
+metricsControls.appendChild(calculateMetricsButton);
+document.body.appendChild(metricsControls);
+
 let separationStr = Number(separationInput.value);
 let cohesionStr = Number(cohesionInput.value);
 let alignmentStr = Number(alignmentInput.value);
@@ -517,9 +602,81 @@ loadBoidModel(false).then(() => {
 });
 
 const _tmpPos = new THREE.Vector3();
+const _centerOfMass = new THREE.Vector3();
+const _sumDirection = new THREE.Vector3();
+const _relativePosition = new THREE.Vector3();
+const _cross = new THREE.Vector3();
 let frameCount = 0;
 const UPDATE_INTERVAL = 1;
 const MAX_DELTA = 0.07;
+
+function flattenBoids(): Boid[] {
+    const all: Boid[] = [];
+    for (const school of boids) {
+        for (const boid of school) {
+            all.push(boid);
+        }
+    }
+    return all;
+}
+
+function calculateGroupMetrics() {
+    const allBoids = flattenBoids();
+    const count = allBoids.length;
+
+    if (count === 0) {
+        flockingRadiusInput.value = '-';
+        polarizationInput.value = '-';
+        angularMomentumInput.value = '-';
+        dispersionInput.value = '-';
+        averageSpeedInput.value = '-';
+        return;
+    }
+
+    _centerOfMass.set(0, 0, 0);
+    _sumDirection.set(0, 0, 0);
+
+    for (const boid of allBoids) {
+        _centerOfMass.add(boid.mesh.position);
+        if (boid.velocity.lengthSq() > 1e-8) {
+            _sumDirection.add(_tmpPos.copy(boid.velocity).normalize());
+        }
+    }
+
+    _centerOfMass.divideScalar(count);
+
+    let radiusSum = 0;
+    let radiusSqSum = 0;
+    let angularMomentumSum = 0;
+    let speedSum = 0;
+
+    for (const boid of allBoids) {
+        _relativePosition.subVectors(boid.mesh.position, _centerOfMass);
+        const distanceToCenter = _relativePosition.length();
+        radiusSum += distanceToCenter;
+        radiusSqSum += distanceToCenter * distanceToCenter;
+        angularMomentumSum += _cross.copy(_relativePosition).cross(boid.velocity).length();
+        speedSum += boid.velocity.length();
+    }
+
+    const flockingRadius = radiusSum / count;
+    const clustering = 1 / (1 + flockingRadius);
+    const polarization = _sumDirection.length() / count;
+    const angularMomentum = angularMomentumSum / count;
+    const radiusVariance = Math.max(0, (radiusSqSum / count) - (flockingRadius * flockingRadius));
+    const dispersion = Math.sqrt(radiusVariance);
+    const averageSpeed = speedSum / count;
+
+    flockingRadiusInput.value = `${flockingRadius.toFixed(2)} / ${clustering.toFixed(3)}`;
+    polarizationInput.value = polarization.toFixed(3);
+    angularMomentumInput.value = angularMomentum.toFixed(2);
+    dispersionInput.value = dispersion.toFixed(2);
+    averageSpeedInput.value = averageSpeed.toFixed(2);
+}
+
+calculateMetricsButton.addEventListener('click', () => {
+    calculateGroupMetrics();
+});
 
 let lastTime = performance.now();
 function animate() {
